@@ -1,0 +1,36 @@
+{
+  "name": "movieshop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MovieShop — a cinema-grade Next.js 14 streaming app with TMDB metadata, NexStream embeds, TikTok-style trailer reels and a flat 50 Bob M-Pesa pass.",
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3000",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.4",
+    "hls.js": "^1.7.3",
+    "idb-keyval": "^6.3.0",
+    "lucide-react": "^0.451.0",
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "sharp": "^0.35.5",
+    "webtorrent": "^3.0.21"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.11",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3"
+  }
+}

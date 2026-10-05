@@ -1,0 +1,172 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --header-h: 4.5rem;
+  }
+
+  html {
+    color-scheme: dark;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-obsidian font-sans text-white antialiased;
+    background-image:
+      radial-gradient(60rem 40rem at 12% -10%, rgba(220, 38, 38, 0.14), transparent 60%),
+      radial-gradient(50rem 36rem at 92% 4%, rgba(220, 38, 38, 0.08), transparent 62%),
+      linear-gradient(180deg, #000000 0%, #09090b 45%, #000000 100%);
+    background-attachment: fixed;
+  }
+
+  * {
+    @apply border-charcoal;
+  }
+
+  ::selection {
+    @apply bg-crimson/80 text-white;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-crimson ring-offset-2 ring-offset-obsidian;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #000;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full border-2 border-black;
+    background: linear-gradient(180deg, #dc2626, #7f1d1d);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #ef4444, #b91c1c);
+  }
+
+  input[type='search']::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
+@layer components {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .glass {
+    @apply border border-white/10 bg-white/[0.04] backdrop-blur-xl;
+  }
+
+  .glass-strong {
+    @apply border border-white/10 bg-charcoal/70 backdrop-blur-2xl;
+  }
+
+  /* Glowing crimson primary CTA with a sweeping highlight. */
+  .btn-glow {
+    @apply relative inline-flex select-none items-center justify-center gap-2 overflow-hidden
+           rounded-full bg-crimson-sheen px-7 py-3 text-sm font-bold uppercase tracking-widest
+           text-white shadow-glow transition-all duration-300
+           hover:shadow-glow-lg hover:brightness-110 active:scale-[0.97];
+  }
+
+  .btn-glow::after {
+    content: '';
+    @apply pointer-events-none absolute inset-0 -translate-x-full
+           bg-gradient-to-r from-transparent via-white/35 to-transparent;
+    transition: transform 0.7s ease;
+  }
+
+  .btn-glow:hover::after {
+    @apply translate-x-full;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15
+           bg-white/5 px-6 py-3 text-sm font-semibold uppercase tracking-widest text-white/90
+           backdrop-blur-md transition-colors duration-200
+           hover:border-crimson/60 hover:bg-crimson/10 hover:text-white;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06]
+           px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/80
+           backdrop-blur-md;
+  }
+
+  .chip-red {
+    @apply border-crimson/40 bg-crimson/15 text-crimson-bright;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * True fullscreen for the player surface.
+ *
+ * The surface carries `aspect-video`, which in fullscreen would letterbox
+ * inside the viewport instead of filling it - the opposite of what tapping the
+ * fullscreen button on a phone should do. `aspect-ratio: auto` plus a forced
+ * 100vw/100vh makes the video fill the screen edge to edge, and `object-fit`
+ * keeps the picture undistorted on both the native <video> and the provider
+ * iframes.
+ *
+ * The :-webkit- prefixed selector is required for iOS Safari.
+ */
+#movieshop-player:fullscreen,
+#movieshop-player:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  aspect-ratio: auto;
+  background: #000;
+  border: 0;
+}
+
+#movieshop-player:fullscreen video,
+#movieshop-player:fullscreen iframe,
+#movieshop-player:-webkit-full-screen video,
+#movieshop-player:-webkit-full-screen iframe {
+  width: 100%;
+  height: 100%;
+  max-height: 100vh;
+  object-fit: contain;
+  border: 0;
+}
+
+/*
+ * On a phone the browser chrome sits over the top and bottom of the page in
+ * portrait. `100vh` reports the *large* viewport height, so the video ends up
+ * taller than what is actually visible and gets clipped. The dynamic viewport
+ * units track the shrinking address bar instead.
+ */
+@supports (height: 100dvh) {
+  #movieshop-player:fullscreen,
+  #movieshop-player:-webkit-full-screen {
+    width: 100dvw;
+    height: 100dvh;
+  }
+}
