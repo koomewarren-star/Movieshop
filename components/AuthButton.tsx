@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LogOut, User } from 'lucide-react';
@@ -8,42 +8,55 @@ import { tryCreateClient } from '@/lib/supabase/client';
 import type { SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 
 /**
+ * NEXT_PUBLIC_* values are inlined at build time, so this is known during the
+ * first render rather than having to be discovered in an effect.
+ */
+const SUPABASE_CONFIGURED = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+);
+
+/**
  * Navbar account control.
  *
- * Renders nothing at all when Supabase is unconfigured, so an unconfigured
- * deploy keeps the header it has today instead of showing a dead "Sign In"
- * button that cannot work.
+ * Renders the Sign In link immediately and swaps it for the account badge once
+ * the session resolves. It deliberately does NOT wait for `getUser()` before
+ * showing anything: that is a network round trip to the Supabase auth server,
+ * and gating the render on it meant the control was absent for the whole of
+ * that round trip. On a slow connection that is seconds of a navbar with no
+ * sign-in affordance at all, and if the call failed the control never appeared
+ * at all.
+ *
+ * Renders nothing when Supabase is unconfigured, so a deploy without the env
+ * vars keeps the header it has today rather than showing a dead button.
  */
 export default function AuthButton() {
   const router = useRouter();
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [ready, setReady] = useState(false);
+  const [client, setClient] = useState<SupabaseClient | null>(null);
   const [busy, setBusy] = useState(false);
-  const clientRef = useRef<SupabaseClient | null>(null);
 
   useEffect(() => {
+    if (!SUPABASE_CONFIGURED) return;
     const supabase = tryCreateClient();
-    clientRef.current = supabase;
     if (!supabase) return;
+    setClient(supabase);
 
     let active = true;
 
     supabase.auth.getUser().then(({ data }: { data: { user: SupabaseUser | null } }) => {
       if (!active) return;
       setUser(data.user ?? null);
-      setReady(true);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event: string, session: { user: SupabaseUser } | null) => {
       setUser(session?.user ?? null);
-      setReady(true);
       /*
-       * Sign-in and sign-out both change server-rendered output (the admin
-       * page, any future gated route). `refresh()` re-runs the server
-       * components so the cookie-backed session is picked up immediately
-       * rather than on the next full navigation.
+        Sign-in and sign-out both change server-rendered output (the admin
+        page, any future gated route). `refresh()` re-runs the server
+        components so the cookie-backed session is picked up immediately
+        rather than on the next full navigation.
        */
       router.refresh();
     });
@@ -54,14 +67,13 @@ export default function AuthButton() {
     };
   }, [router]);
 
-  if (!ready || !clientRef.current) return null;
+  if (!SUPABASE_CONFIGURED) return null;
 
   const signOut = async () => {
-    const supabase = clientRef.current;
-    if (!supabase) return;
+    if (!client) return;
     setBusy(true);
     try {
-      await supabase.auth.signOut();
+      await client.auth.signOut();
       router.push('/');
       router.refresh();
     } finally {
@@ -82,9 +94,9 @@ export default function AuthButton() {
   }
 
   /*
-    `user_metadata.avatar_url` is only populated when the provider supplies a
-    picture. Email sign-up does not, so the initial-based badge below is the
-    normal case rather than a fallback for something broken.
+    `user_metadata.avatar_url` is only populated when the identity provider
+    supplies a picture. Email sign-up does not, so the initial-based badge
+    below is the normal case rather than a fallback for something broken.
   */
   const avatar = typeof user.user_metadata?.avatar_url === 'string' ? user.user_metadata.avatar_url : null;
 
