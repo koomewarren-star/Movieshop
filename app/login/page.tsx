@@ -160,8 +160,8 @@ export default function LoginPage() {
       </h1>
       <p className="mt-2 text-sm text-white/50">
         {signingUp
-          ? 'One account for your pass, downloads and continue watching.'
-          : 'Welcome back. Your Access Pass and progress are waiting.'}
+          ? 'One account for downloads and continue watching.'
+          : 'Welcome back. Your watch progress is waiting.'}
       </p>
 
       {!configured && (

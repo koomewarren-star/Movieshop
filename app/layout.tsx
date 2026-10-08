@@ -11,12 +11,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'MovieShop — Unlimited HD Movies & TV Series for 100 Bob / Month',
+  title: 'MovieShop — Unlimited HD Movies & TV Series, Free',
   description:
-    'Cinema-grade streaming for Kenya. Trending films, TV series and anime in 4K. One flat M-Pesa Access Pass at 100 Bob per month unlocks everything.',
+    'Cinema-grade streaming for Kenya. Trending films, TV series and anime in 4K. Free with an account — no card, no M-Pesa, no subscription.',
   applicationName: 'MovieShop',
   manifest: '/manifest.webmanifest',
-  keywords: ['MovieShop', 'streaming', 'movies', 'tv series', 'anime', 'M-Pesa', 'Kenya'],
+  keywords: ['MovieShop', 'streaming', 'movies', 'tv series', 'anime', 'free streaming', 'Kenya'],
   icons: {
     icon: [
       { url: '/icons/favicon-32.png', sizes: '32x32', type: 'image/png' },
@@ -38,8 +38,8 @@ export const metadata: Metadata = {
     'mobile-web-app-capable': 'yes',
   },
   openGraph: {
-    title: 'MovieShop — Stream Unlimited HD for 100 Bob / Month',
-    description: 'Trending films, series and anime in 4K. Pay 100 Bob via M-Pesa and watch everything.',
+    title: 'MovieShop — Stream Unlimited HD, Free',
+    description: 'Trending films, series and anime in 4K. Free with an account. No card needed.',
     type: 'website',
   },
 };

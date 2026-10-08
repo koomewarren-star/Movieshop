@@ -77,17 +77,3 @@ export interface HomeData {
   allRows?: Array<{ id: string; emoji: string; title: string }>;
   source: 'tmdb' | 'demo';
 }
-
-export type PayStatus =
-  | 'idle'
-  | 'authorizing'
-  | 'awaiting'
-  | 'processing'
-  | 'success'
-  | 'error';
-
-export interface PayState {
-  status: PayStatus;
-  message?: string;
-  checkoutRequestId?: string;
-}

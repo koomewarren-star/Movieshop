@@ -2,16 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Check, Crown, Menu, PlayCircle, X } from 'lucide-react';
+import { Menu, PlayCircle, X } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
 import AuthButton from '@/components/AuthButton';
-import { useSubscription } from '@/components/SubscriptionProvider';
-import { PLAN } from '@/lib/mpesa';
 import type { SearchHit } from '@/lib/types';
 
 interface NavbarProps {
   onSearchSelect: (hit: SearchHit) => void;
-  onOpenPaywall: () => void;
 }
 
 const NAV_LINKS = [
@@ -21,8 +18,7 @@ const NAV_LINKS = [
   { href: '#toprated', label: 'Top Rated' },
 ];
 
-export default function Navbar({ onSearchSelect, onOpenPaywall }: NavbarProps) {
-  const { isSubscribed } = useSubscription();
+export default function Navbar({ onSearchSelect }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -69,39 +65,6 @@ export default function Navbar({ onSearchSelect, onOpenPaywall }: NavbarProps) {
           <SearchBar onSelect={onSearchSelect} />
         </div>
 
-        {/* Live subscription pill */}
-        <button
-          type="button"
-          onClick={() => {
-            if (!isSubscribed) onOpenPaywall();
-          }}
-          title={
-            isSubscribed
-              ? 'MovieShop Access Pass active'
-              : `Unlock everything for ${PLAN.priceBob} ${PLAN.currency} / ${PLAN.cadence}`
-          }
-          className={`ml-auto inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-300 md:ml-0 ${
-            isSubscribed
-              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 shadow-[0_0_20px_-6px_rgba(16,185,129,0.7)]'
-              : 'border-crimson/45 bg-crimson/10 text-crimson-bright hover:border-crimson hover:bg-crimson/20 hover:shadow-glow'
-          }`}
-        >
-          {isSubscribed ? (
-            <>
-              <Check className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Subscribed</span>
-            </>
-          ) : (
-            <>
-              <Crown className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">
-                {PLAN.priceBob} {PLAN.currency} / {PLAN.cadence}
-              </span>
-              <span className="sm:hidden">{PLAN.priceBob} Bob</span>
-            </>
-          )}
-        </button>
-
         {/* Account session control. Renders nothing until Supabase is configured. */}
         <AuthButton />
 
@@ -139,19 +102,13 @@ export default function Navbar({ onSearchSelect, onOpenPaywall }: NavbarProps) {
               </li>
             ))}
           </ul>
-          {!isSubscribed && (
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenPaywall();
-              }}
-              className="btn-glow mt-4 w-full"
+          <Link
+              href="/login"
+              onClick={() => setMenuOpen(false)}
+              className="btn-glow mt-4 flex w-full items-center justify-center"
             >
-              <Crown className="h-4 w-4" />
-              Get Access Pass — {PLAN.priceBob} Bob
-            </button>
-          )}
+              Sign In — Free Access
+            </Link>
         </div>
       )}
     </header>

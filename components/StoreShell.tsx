@@ -1,22 +1,27 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Crown, Heart, Lock, Smartphone, Sparkles } from 'lucide-react';
 import DetailsModal from '@/components/DetailsModal';
 import ContinueWatching from '@/components/ContinueWatching';
 import HeroBanner from '@/components/HeroBanner';
 import MediaRow from '@/components/MediaRow';
-import MpesaPaywall from '@/components/MpesaPaywall';
 import Navbar from '@/components/Navbar';
 import NexstreamPlayer from '@/components/NexstreamPlayer';
-import { SubscriptionProvider, hasStoredSubscription, useSubscription } from '@/components/SubscriptionProvider';
+import SignInGate from '@/components/SignInGate';
 import TrailerReels from '@/components/TrailerReels';
-import { PLAN } from '@/lib/mpesa';
+import { useSupabaseUser } from '@/hooks/useSupabaseUser';
 import type { WatchEntry } from '@/lib/watchProgress';
 import type { HomeData, MediaItem, SearchHit } from '@/lib/types';
 
 function Store({ data }: { data: HomeData }) {
-  const { isSubscribed, subscribe, subscription, cancel } = useSubscription();
+  /*
+    A free Supabase account is now the only key. There is no paid tier, so
+    there is nothing to check beyond "is there a session".
+   */
+  const { user, ready: authReady } = useSupabaseUser();
+  const isSignedIn = Boolean(user);
 
   const [playerItem, setPlayerItem] = useState<MediaItem | null>(null);
   const [playerSeason, setPlayerSeason] = useState(1);
@@ -26,7 +31,7 @@ function Store({ data }: { data: HomeData }) {
   const [detailsItem, setDetailsItem] = useState<MediaItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [gateOpen, setGateOpen] = useState(false);
   const [intent, setIntent] = useState<string | null>(null);
 
   /*
@@ -93,28 +98,31 @@ function Store({ data }: { data: HomeData }) {
   }, [deferred, deferredItems]);
 
   /**
-   * Every entry point funnels through here: subscribed viewers go straight to
-   * the player, everyone else hits the flat-rate paywall.
+   * Every entry point funnels through here: signed-in viewers go straight to
+   * the player, everyone else gets the sign-in gate.
    *
-   * `hasStoredSubscription()` covers the first-paint window, before the
-   * provider's effect has restored state, so a fast click from an already-paid
-   * viewer is not greeted by the paywall.
+   * `authReady` matters. Before the session resolves we do not know whether
+   * this viewer is signed in, so blocking on it would bounce an already-signed-in
+   * viewer who clicked during first paint. Gating on it means a signed-out
+   * viewer may briefly be able to reach the player on a fast first click;
+   * that is the lesser failure compared with locking people out of their own
+   * account.
    */
   const requestWatch = useCallback(
     (item: MediaItem, season = 1, episode = 1) => {
       setPlayerItem(item);
       setPlayerSeason(season);
       setPlayerEpisode(episode);
-      if (isSubscribed || hasStoredSubscription()) {
+      if (isSignedIn || !authReady) {
         setDetailsOpen(false);
         setPlayerOpen(true);
       } else {
         setIntent(item.title);
         setDetailsOpen(false);
-        setPaywallOpen(true);
+        setGateOpen(true);
       }
     },
-    [isSubscribed],
+    [isSignedIn, authReady],
   );
 
   const openDetails = useCallback((item: MediaItem) => {
@@ -122,16 +130,16 @@ function Store({ data }: { data: HomeData }) {
     setDetailsOpen(true);
   }, []);
 
-  const openPaywall = useCallback(() => {
+  const openGate = useCallback(() => {
     setIntent(null);
-    setPaywallOpen(true);
+    setGateOpen(true);
   }, []);
 
   /**
    * Opens a title from Continue Watching at the season/episode it was left on.
    *
    * Films ignore the season/episode entirely, so they go straight through to the
-   * paywall gate exactly like any other title. Series carry them through so the
+   * gate exactly like any other title. Series carry them through so the
    * viewer lands on the episode they were watching rather than S1E1.
    */
   const resumeFromProgress = useCallback(
@@ -160,38 +168,25 @@ function Store({ data }: { data: HomeData }) {
     [openDetails],
   );
 
-  const onSubscribed = useCallback(
-    ({ phone, checkoutRequestId }: { phone: string; checkoutRequestId: string }) => {
-      subscribe({ phone, checkoutRequestId });
-      // Replay whatever the viewer originally tried to watch.
-      if (playerItem) setPlayerOpen(true);
-    },
-    [subscribe, playerItem],
-  );
-
-  const closePaywall = useCallback(() => {
-    setPaywallOpen(false);
-    if (!isSubscribed) setIntent(null);
-  }, [isSubscribed]);
+  const closeGate = useCallback(() => {
+    setGateOpen(false);
+    if (!isSignedIn) setIntent(null);
+  }, [isSignedIn]);
 
   const footerColumns = [
     { title: 'Browse', links: data.rows.map((row) => row.title) },
     {
       title: 'Account',
-      links: subscription
-        ? [
-            `Active since ${new Date(subscription.since).toLocaleDateString()}`,
-            `Receipt ${subscription.checkoutRequestId}`,
-            'Cancel pass',
-          ]
-        : ['Get Access Pass', 'Payment methods', 'Help centre'],
+      links: isSignedIn
+        ? [user?.email ?? 'Signed in', 'Your watch progress', 'Sign out']
+        : ['Sign in', 'Create a free account', 'Help centre'],
     },
     { title: 'Legal', links: ['Terms of use', 'Privacy policy', 'Content notice'] },
   ];
 
   return (
     <div className="min-h-screen">
-      <Navbar onSearchSelect={onSearchSelect} onOpenPaywall={openPaywall} />
+      <Navbar onSearchSelect={onSearchSelect} />
 
       <main>
         <HeroBanner items={data.hero} onWatch={requestWatch} onDetails={openDetails} />
@@ -201,9 +196,9 @@ function Store({ data }: { data: HomeData }) {
         {/* Continue Watching sits directly below Quick Clips. Renders nothing
             until there is progress to show, so the gap closes rather than
             leaving an empty band on a fresh browser. */}
-        <ContinueWatching onSelect={resumeFromProgress} locked={!isSubscribed} />
+        <ContinueWatching onSelect={resumeFromProgress} locked={!isSignedIn} />
 
-        {!isSubscribed && (
+        {!isSignedIn && (
           <section className="px-4 pb-4 sm:px-6 lg:px-10">
             <div className="mx-auto flex max-w-[100rem] flex-col items-start gap-5 rounded-2xl border border-crimson/25 bg-gradient-to-r from-crimson/15 via-charcoal/60 to-transparent p-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div className="flex items-start gap-4">
@@ -212,28 +207,28 @@ function Store({ data }: { data: HomeData }) {
                 </span>
                 <div>
                   <h2 className="text-lg font-black uppercase tracking-tight text-white sm:text-xl">
-                    Every title locked
+                    Everything is free
                   </h2>
                   <p className="mt-1 text-sm text-white/55">
-                    Unlock all movies, series and anime for a flat{' '}
-                    <span className="font-bold text-crimson-bright">
-                      {PLAN.priceBob} {PLAN.currency}
-                    </span>{' '}
-                    / {PLAN.cadence} via M-Pesa.
+                    Create a free account to unlock all movies, series and anime. No
+                    card, no M-Pesa, no subscription.
                   </p>
                 </div>
               </div>
-              <button type="button" onClick={openPaywall} className="btn-glow w-full shrink-0 sm:w-auto">
+              <Link
+                href="/login"
+                className="btn-glow inline-flex w-full shrink-0 items-center justify-center gap-2 sm:w-auto"
+              >
                 <Crown className="h-4 w-4" />
-                Unlock Everything
-              </button>
+                Get Free Access
+              </Link>
             </div>
           </section>
         )}
 
         <div id="browse" className="space-y-6 py-8 sm:space-y-9 sm:py-12">
           {data.rows.map((row) => (
-            <MediaRow key={row.id} row={row} onSelect={openDetails} locked={!isSubscribed} />
+            <MediaRow key={row.id} row={row} onSelect={openDetails} locked={!isSignedIn} />
           ))}
 
           {/*
@@ -255,7 +250,7 @@ function Store({ data }: { data: HomeData }) {
                   nextPage: 2,
                 }}
                 onSelect={openDetails}
-                locked={!isSubscribed}
+                locked={!isSignedIn}
                 loading={Boolean(requested[meta.id]) && !deferredItems[meta.id]}
               />
             </div>
@@ -275,12 +270,12 @@ function Store({ data }: { data: HomeData }) {
                   </span>
                 </div>
                 <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/45">
-                  Cinema-grade streaming for Kenya. One flat Access Pass, every title,
-                  every device.
+                  Cinema-grade streaming for Kenya. Every title, every device, free
+                  with an account.
                 </p>
                 <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/55">
                   <Smartphone className="h-3.5 w-3.5 text-crimson-bright" />
-                  M-Pesa · {PLAN.priceBob} {PLAN.currency} / {PLAN.cadence}
+                  Free · No card needed
                 </p>
               </div>
 
@@ -292,16 +287,16 @@ function Store({ data }: { data: HomeData }) {
                   <ul className="mt-4 space-y-2.5">
                     {column.links.map((link) => (
                       <li key={link}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (link === 'Cancel pass') cancel();
-                            else if (link === 'Get Access Pass') openPaywall();
-                          }}
-                          className="text-left text-sm text-white/60 transition-colors hover:text-crimson-bright"
-                        >
-                          {link}
-                        </button>
+                        {link === 'Sign in' || link === 'Create a free account' ? (
+                          <Link
+                            href="/login"
+                            className="text-left text-sm text-white/60 transition-colors hover:text-crimson-bright"
+                          >
+                            {link}
+                          </Link>
+                        ) : (
+                          <span className="text-left text-sm text-white/60">{link}</span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -316,16 +311,6 @@ function Store({ data }: { data: HomeData }) {
                 <Heart className="h-3.5 w-3.5 fill-crimson text-crimson" />
               </p>
             </div>
-
-            {subscription && (
-              <button
-                type="button"
-                onClick={cancel}
-                className="mt-4 text-[11px] uppercase tracking-widest text-white/25 transition-colors hover:text-crimson-bright"
-              >
-                Reset demo subscription
-              </button>
-            )}
           </div>
         </footer>
       </main>
@@ -345,20 +330,11 @@ function Store({ data }: { data: HomeData }) {
         initialEpisode={playerEpisode}
       />
 
-      <MpesaPaywall
-        open={paywallOpen}
-        onClose={closePaywall}
-        onSubscribed={onSubscribed}
-        intent={intent}
-      />
+      <SignInGate open={gateOpen} onClose={closeGate} intent={intent} />
     </div>
   );
 }
 
 export default function StoreShell({ data }: { data: HomeData }) {
-  return (
-    <SubscriptionProvider>
-      <Store data={data} />
-    </SubscriptionProvider>
-  );
+  return <Store data={data} />;
 }
