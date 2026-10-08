@@ -29,7 +29,6 @@ import {
   type ProviderId,
 } from '@/lib/playback';
 import type { MediaItem } from '@/lib/types';
-import P2PDownloader from '@/components/P2PDownloader';
 import PlayerShield from '@/components/PlayerShield';
 import { useAdRedirectBlocker } from '@/hooks/useAdRedirectBlocker';
 import { recordProgress } from '@/lib/watchProgress';
@@ -369,18 +368,16 @@ export default function NexstreamPlayer({
             <Expand className="h-4 w-4" />
           </button>
 
-          {/* P2P download. Renders nothing for a title with no catalogue
-              magnet, rather than a button that fails on click. */}
-          {item.magnetUri && (
-            <div className="shrink-0">
-              <P2PDownloader
-                magnetUri={item.magnetUri}
-                title={item.title}
-                id={String(item.id)}
-                poster={item.poster}
-              />
-            </div>
-          )}
+          {/*
+            P2P download is temporarily disabled.
+
+            The control was removed here rather than deleted so it can be
+            restored with a single revert. `P2PDownloader`, `lib/p2pStore.ts`
+            and `types/webtorrent.d.ts` are all still present and untouched;
+            dropping the last import is what keeps webtorrent out of the client
+            bundle, so the module is parked rather than dead weight on page
+            weight.
+          */}
 
           <button
             type="button"
