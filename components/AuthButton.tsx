@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut, User } from 'lucide-react';
+import { Check, LogOut, User } from 'lucide-react';
 import { tryCreateClient } from '@/lib/supabase/client';
 import { useSupabaseUser } from '@/hooks/useSupabaseUser';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -65,6 +65,16 @@ export default function AuthButton() {
   }
 
   /*
+    Signed-in state.
+
+    The green pill is the account's "you are in" indicator, and it occupies
+    the slot the old subscription pill used to sit in, so the header keeps the
+    same balance. The label is the first thing to hide on narrow viewports
+    because the sign-out button is the part that must stay reachable - a viewer
+    who cannot get signed out on a phone has a real problem.
+  */
+
+  /*
     `user_metadata.avatar_url` is only populated when the identity provider
     supplies a picture. Email sign-up does not, so the initial-based badge
     below is the normal case rather than a fallback for something broken.
@@ -73,18 +83,23 @@ export default function AuthButton() {
 
   return (
     <div className="flex shrink-0 items-center gap-2">
+      <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-emerald-300 shadow-[0_0_20px_-6px_rgba(16,185,129,0.7)]">
+        <Check className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Signed In</span>
+      </span>
+
       {avatar ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={avatar}
           alt=""
-          className="h-8 w-8 shrink-0 rounded-full border border-white/15 object-cover"
+          className="hidden h-8 w-8 shrink-0 rounded-full border border-white/15 object-cover lg:block"
           referrerPolicy="no-referrer"
         />
       ) : (
         <span
           aria-hidden="true"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-crimson/20 text-[11px] font-black uppercase text-crimson-bright ring-1 ring-inset ring-crimson/40"
+          className="hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-crimson/20 text-[11px] font-black uppercase text-crimson-bright ring-1 ring-inset ring-crimson/40 lg:grid"
         >
           {(user.email ?? '?').charAt(0)}
         </span>
@@ -92,7 +107,7 @@ export default function AuthButton() {
 
       <span
         title={user.email ?? undefined}
-        className="hidden max-w-[14rem] truncate text-xs font-semibold text-white/65 md:inline"
+        className="hidden max-w-[14rem] truncate text-xs font-semibold text-white/65 xl:inline"
       >
         {user.email}
       </span>
@@ -103,9 +118,10 @@ export default function AuthButton() {
         disabled={busy}
         aria-label="Sign out"
         title="Sign out"
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/10 text-white/70 transition-colors hover:border-crimson hover:bg-crimson/20 hover:text-white disabled:opacity-50"
+        className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-white/80 transition-colors hover:border-crimson hover:bg-crimson/15 hover:text-white disabled:opacity-50"
       >
-        <LogOut className="h-4 w-4" />
+        <LogOut className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Sign Out</span>
       </button>
     </div>
   );
