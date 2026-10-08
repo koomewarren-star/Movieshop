@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Check, Crown, Menu, PlayCircle, X } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
+import AuthButton from '@/components/AuthButton';
 import { useSubscription } from '@/components/SubscriptionProvider';
 import { PLAN } from '@/lib/mpesa';
 import type { SearchHit } from '@/lib/types';
@@ -100,6 +101,9 @@ export default function Navbar({ onSearchSelect, onOpenPaywall }: NavbarProps) {
             </>
           )}
         </button>
+
+        {/* Account session control. Renders nothing until Supabase is configured. */}
+        <AuthButton />
 
         <button
           type="button"
