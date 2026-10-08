@@ -12,6 +12,8 @@ import NexstreamPlayer from '@/components/NexstreamPlayer';
 import SignInGate from '@/components/SignInGate';
 import TrailerReels from '@/components/TrailerReels';
 import { useSupabaseUser } from '@/hooks/useSupabaseUser';
+import { playerEvent } from '@/hooks/usePlayerDiagnostics';
+import { pendingToMediaItem, readPendingPlayback } from '@/lib/playerRecovery';
 import type { WatchEntry } from '@/lib/watchProgress';
 import type { HomeData, MediaItem, SearchHit } from '@/lib/types';
 
@@ -33,6 +35,30 @@ function Store({ data }: { data: HomeData }) {
 
   const [gateOpen, setGateOpen] = useState(false);
   const [intent, setIntent] = useState<string | null>(null);
+
+  /*
+    Redirect recovery.
+
+    If the upstream embed navigates the tab, the app reloads with no modal and
+    no context. `NexstreamPlayer` stores the intended title before playback
+    starts; this restores it once, on mount. Restoration is deliberately one
+    shot and gated on the viewer being signed in, because a recovered player for
+    a signed-out visitor would open straight back into the sign-in gate, and
+    repeatedly re-opening a modal on a loop of navigations would be worse than
+    dropping the viewer on the home page.
+   */
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !authReady || !isSignedIn) return;
+    restored.current = true;
+    const pending = readPendingPlayback();
+    if (!pending) return;
+    playerEvent('player recovery restored', { id: String(pending.id), kind: pending.kind });
+    setPlayerItem(pendingToMediaItem(pending));
+    setPlayerSeason(pending.season);
+    setPlayerEpisode(pending.episode);
+    setPlayerOpen(true);
+  }, [authReady, isSignedIn]);
 
   /*
     Deferred rows: registered in lib/rows.ts but not part of first paint.

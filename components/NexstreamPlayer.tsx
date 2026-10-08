@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   Expand,
@@ -11,6 +12,7 @@ import {
   Minus,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   ShieldAlert,
   Star,
@@ -31,6 +33,8 @@ import {
 import type { MediaItem } from '@/lib/types';
 import PlayerShield from '@/components/PlayerShield';
 import { useAdRedirectBlocker } from '@/hooks/useAdRedirectBlocker';
+import { playerEvent, usePlayerDiagnostics } from '@/hooks/usePlayerDiagnostics';
+import { clearPendingPlayback, savePendingPlayback } from '@/lib/playerRecovery';
 import { recordProgress } from '@/lib/watchProgress';
 
 interface NexstreamPlayerProps {
@@ -43,6 +47,18 @@ interface NexstreamPlayerProps {
 
 /** Retries a stalled cc stream this many times before giving up. */
 const MAX_ATTEMPTS = 2;
+
+/**
+ * How long the embed gets to fire `load` before we treat the player as failed.
+ *
+ * A cross-origin frame that 404s or is blocked still fires `load` for the error
+ * document, and the `error` event does not fire at all for HTTP failures, so
+ * load timing is the only failure signal available from this side. Generous on
+ * purpose: a cold Cloudflare Turnstile plus an ad-heavy page routinely takes
+ * several seconds on a mobile connection, and a too-short timeout would show a
+ * "reload" button over a player that was about to work.
+ */
+const FRAME_LOAD_TIMEOUT_MS = 20000;
 
 export default function NexstreamPlayer({
   item,
@@ -59,6 +75,15 @@ export default function NexstreamPlayer({
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  /**
+   * Bumped to force a fresh iframe. This is the only recovery lever available:
+   * it remounts our own element and leaves the provider's state untouched.
+   */
+  const [recoveryNonce, setRecoveryNonce] = useState(0);
+  /** True once the embed has fired `load` for the current recoveryNonce. */
+  const [frameReady, setFrameReady] = useState(false);
+
+  usePlayerDiagnostics({ active: open, recoveryNonce });
 
   /* Restore the viewer's chosen provider. */
   useEffect(() => {
@@ -88,7 +113,79 @@ export default function NexstreamPlayer({
     setEpisode(initialEpisode);
     setAttempt(0);
     setError(null);
+    setFrameReady(false);
   }, [open, item, initialSeason, initialEpisode]);
+
+  /*
+    Record what the viewer intended to watch before anything can navigate away.
+
+    This is the actual recovery mechanism. If the embed navigates the tab, the
+    app is reloaded cold and the modal is gone; this is what lets
+    `readPendingPlayback` put the player back rather than dumping them on the
+    home page. Written on open rather than on unmount, because an unexpected
+    navigation means there is no unmount.
+   */
+  useEffect(() => {
+    if (!open || !item) return;
+    if (savePendingPlayback(item, initialSeason, initialEpisode)) {
+      playerEvent('pending-playback saved', { id: String(item.id), kind: item.kind });
+    }
+  }, [open, item, initialSeason, initialEpisode]);
+
+  /*
+    Back should close the player, not leave the site.
+
+    One history entry is pushed when the modal opens and consumed when it
+    closes, so the stack depth the viewer sees matches what they opened. Kept
+    deliberately symmetric: no replaceState loops, no synthetic redirect, and
+    the entry is only pushed once per open, so holding Back behaves normally.
+   */
+  useEffect(() => {
+    if (!open) return;
+
+    window.history.pushState({ movieshopPlayer: true }, '');
+    let consumed = false;
+
+    const onPopState = () => {
+      consumed = true;
+      onClose();
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      /*
+        Close by the X button or Escape never went through a popstate, so the
+        entry we pushed is still on the stack. Remove exactly one, and only if
+        it is still ours - a viewer who pressed Back already consumed it.
+       */
+      if (!consumed) window.history.back();
+      clearPendingPlayback();
+    };
+  }, [open, onClose]);
+
+  /*
+    Load watchdog. The cross-origin frame gives us no error event for HTTP
+    failures, so a silent no-load is the only failure signal we get. On
+    timeout we surface a reload action rather than spinning forever.
+   */
+  useEffect(() => {
+    if (!open || frameReady) return;
+    const timer = window.setTimeout(() => {
+      playerEvent('player iframe load timeout', { ms: FRAME_LOAD_TIMEOUT_MS });
+      setError('The player took too long to respond.');
+    }, FRAME_LOAD_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [open, frameReady, recoveryNonce]);
+
+  /** Remounts only our own player state. Never navigates anywhere. */
+  const reloadPlayer = useCallback(() => {
+    playerEvent('player recovery requested', { recoveryNonce });
+    setLoading(true);
+    setError(null);
+    setFrameReady(false);
+    setRecoveryNonce((value) => value + 1);
+  }, [recoveryNonce]);
 
   /*
     Feed the Continue Watching row.
@@ -485,23 +582,111 @@ export default function NexstreamPlayer({
                 our own origin. See lib/playback.ts.
               */}
               <iframe
-                key={playback.url}
+                key={`${playback.url}-${recoveryNonce}`}
                 src={playback.url}
                 title={`${item.title} video player`}
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                 allowFullScreen
                 referrerPolicy="no-referrer-when-downgrade"
-                onLoad={() => setLoading(false)}
+                onLoad={() => {
+                  setLoading(false);
+                  setFrameReady(true);
+                  playerEvent('player iframe loaded');
+                }}
                 className="h-full w-full border-0"
               />
 
               {/*
-                Absorbs the first gesture so the provider's pop-under listener
-                never fires. Absolutely positioned inside the existing video
-                surface, so dimensions and layout are unchanged, and it
-                unmounts itself after one click.
+                Absorbs the first gesture, where such a provider arms its
+                pop-under listener. Bounded three ways - one gesture, a hard
+                timer, and an immediate release on any confirm key - so it can
+                never hold the surface and can never swallow the click an
+                interactive verification challenge might need.
               */}
               <PlayerShield />
+
+              {/*
+                Control bar.
+
+                Only controls that genuinely work are rendered. Fullscreen
+                targets `#movieshop-player`, which this application owns, so it
+                works regardless of what the provider does inside the frame.
+                Reload rebuilds our own state without navigating anywhere.
+
+                There is deliberately no play/pause, -10s or +10s here. The
+                video element lives inside a cross-origin document, so its
+                currentTime, play() and pause() are unreachable from here, the
+                provider exposes no playback API, and postMessage is only
+                meaningful if the receiving side listens for it, which this one
+                does not. A button that looked live but did nothing would be
+                worse than its absence.
+              */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-2 p-2.5 sm:p-3">
+                <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-md">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      // Keep the gesture from reaching the provider's own
+                      // listeners underneath the overlay.
+                      event.stopPropagation();
+                      event.preventDefault();
+                      reloadPlayer();
+                    }}
+                    disabled={loading && !error}
+                    aria-label="Reload player"
+                    title="Reload player"
+                    className="grid h-10 w-10 place-items-center rounded-lg text-white/80 transition-all duration-150 hover:scale-105 hover:bg-white/10 hover:text-white active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
+                  <span className="px-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40">
+                    Reload
+                  </span>
+                </div>
+
+                <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-md">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      event.preventDefault();
+                      void goFullscreen();
+                    }}
+                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                    title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                    className="grid h-10 w-10 place-items-center rounded-lg text-white/80 transition-all duration-150 hover:scale-105 hover:bg-white/10 hover:text-white active:scale-95"
+                  >
+                    {isFullscreen ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+                  </button>
+                  <span className="px-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40">
+                    {isFullscreen ? 'Exit' : 'Fullscreen'}
+                  </span>
+                </div>
+              </div>
+
+              {/*
+                Failure state. Offers to rebuild our own player state only; it
+                never navigates anywhere, so a broken embed cannot bounce the
+                viewer off-site, and there is no automatic retry, so a genuinely
+                dead embed cannot spin forever.
+              */}
+              {error && (
+                <div className="absolute inset-0 z-30 grid place-items-center bg-black/90 px-6 backdrop-blur-sm">
+                  <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+                    <AlertTriangle className="h-8 w-8 text-amber-400" />
+                    <div>
+                      <p className="text-sm font-bold uppercase tracking-wide text-white">
+                        Player unavailable
+                      </p>
+                      <p className="mt-1.5 text-xs text-white/50">{error}</p>
+                    </div>
+                    <button type="button" onClick={reloadPlayer} className="btn-glow inline-flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4" />
+                      Reload player
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/*
                 Pop-under notice.

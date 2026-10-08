@@ -14,8 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   3. Render a full-screen invisible overlay that fires (1) or (2) on the next
  *      click, usually on the player's own play button.
  *
- * `PlayerShield` handles (3). This hook covers (1) and (2) as far as the web
- * platform allows.
+ * `PlayerShield` addresses (3). This hook observes and reports (1) and (2).
  *
  * ## What the platform does and does not let us do
  *
@@ -26,13 +25,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * unavailable and the capability cannot be removed. `Permissions-Policy` has
  * no top-navigation directive, so the `allow` attribute cannot substitute.
  *
- * Consequently this hook is mitigation, not prevention, and it is written to be
- * honest about that rather than to look like a guarantee:
+ * Consequently this hook is observation, not prevention, and the code is
+ * written to be honest about that rather than to look like a guarantee:
  *
  *   - A navigation to this tab CANNOT be cancelled from script. Assigning to
  *     `window.top.location` commits the navigation and no `preventDefault`
- *     exists for it. `beforeunload` is the only interrupt point, and all it can
- *     do is require the viewer to confirm.
+ *     exists for it. `beforeunload` is the only interrupt point and all it can
+ *     do is ask the viewer to confirm - which is why `promptOnExit` now
+ *     defaults to false: warning on every Back press and tab close during
+ *     playback is a poor trade for a prompt that does not stop the one thing
+ *     it was meant to stop.
  *   - A pop-under CANNOT be closed. A window opened by the iframe is not ours
  *     to close, and we never receive a handle on it. It also does not navigate
  *     our tab, so our page survives and can warn the viewer.
@@ -41,12 +43,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * does not prevent one, and nothing here closes the tab the provider opened.
  *
  * (Product copy currently says "blocked a pop-up attempt and kept you here",
- * chosen deliberately over that wording. The underlying limit is real and
- * documented above: nothing here closes the tab. If that copy is ever revised,
- * this paragraph is the technical reason for revising it.)
+ * chosen deliberately over more cautious wording. The underlying limit is real
+ * and documented above: nothing here closes the tab. If that copy is ever
+ * revised, this paragraph is the technical reason for revising it.)
  *
- * Both are still worth having: they convert a silent loss of the session into
- * a visible, recoverable moment.
+ * What actually recovers the session if (1) happens is
+ * `lib/playerRecovery.ts`: the intended title is stored before playback starts
+ * and the player is reconstructed on the next load.
  */
 
 export interface AdRedirectBlockerState {
@@ -62,20 +65,21 @@ export function useAdRedirectBlocker(
     /**
      * Prompt on real navigation.
      *
-     * `true` is what interrupts a click-triggered tab hijack: Chrome honours a
-     * `beforeunload` dialog when the page has had recent user activation, which
-     * is exactly the hijack case. The cost is that the viewer's own back button,
-     * tab close and reload during playback also prompt, which is annoying but
-     * honest — the page genuinely cannot tell the two apart.
+     * Defaults to false. A `beforeunload` dialog cannot cancel a cross-origin
+     * navigation initiated inside the frame - the exact case we care about - it
+     * can only ask the viewer to confirm. Enabling it therefore warns on every
+     * Back press, tab close and reload during playback while still failing to
+     * stop a hijack, which is a bad trade for viewers and no benefit for us.
      *
-     * `false` records attempts in dev only and stays out of the way.
+     * Set true only if you want the noisy warning as a tripwire while
+     * investigating redirect reports.
      */
     promptOnExit?: boolean;
     /** Called when a pop-under is suspected, for UI wiring. */
     onPopunder?: () => void;
   } = {},
 ): AdRedirectBlockerState {
-  const { promptOnExit = true, onPopunder } = options;
+  const { promptOnExit = false, onPopunder } = options;
 
   /*
     Guard against the pop-under heuristic false-positiving. Switching tabs to
