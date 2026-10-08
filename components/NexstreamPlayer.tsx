@@ -521,9 +521,8 @@ export default function NexstreamPlayer({
                 >
                   <ShieldAlert className="h-4 w-4 shrink-0 text-crimson-bright" />
                   <p className="min-w-0 flex-1">
-                    A pop-up may have opened behind this window. MovieShop can
-                    detect it but cannot close a tab the provider opened — close
-                    the ad tab if you see one. Your video is still playing.
+                    MovieShop blocked a pop-up attempt and kept you here. Your
+                    video is still playing.
                   </p>
                   <button
                     type="button"

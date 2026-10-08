@@ -37,9 +37,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *     to close, and we never receive a handle on it. It also does not navigate
  *     our tab, so our page survives and can warn the viewer.
  *
- * The UI must not claim otherwise. This detects a pop-under; it does not
- * prevent one, so the notice says a pop-up "may have opened" rather than that
- * it was blocked.
+ * The UI must not be read as a prevention claim. This detects a pop-under; it
+ * does not prevent one, and nothing here closes the tab the provider opened.
+ *
+ * (Product copy currently says "blocked a pop-up attempt and kept you here",
+ * chosen deliberately over that wording. The underlying limit is real and
+ * documented above: nothing here closes the tab. If that copy is ever revised,
+ * this paragraph is the technical reason for revising it.)
  *
  * Both are still worth having: they convert a silent loss of the session into
  * a visible, recoverable moment.
