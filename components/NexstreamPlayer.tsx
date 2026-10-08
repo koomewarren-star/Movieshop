@@ -12,6 +12,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  ShieldAlert,
   Star,
   X,
 } from 'lucide-react';
@@ -29,6 +30,8 @@ import {
 } from '@/lib/playback';
 import type { MediaItem } from '@/lib/types';
 import P2PDownloader from '@/components/P2PDownloader';
+import PlayerShield from '@/components/PlayerShield';
+import { useAdRedirectBlocker } from '@/hooks/useAdRedirectBlocker';
 import { recordProgress } from '@/lib/watchProgress';
 
 interface NexstreamPlayerProps {
@@ -169,6 +172,25 @@ export default function NexstreamPlayer({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onKey]);
+
+  /*
+    Top-level navigation and pop-under defence.
+
+    The iframe cannot be sandboxed — the provider refuses to initialise in a
+    sandboxed frame, see the comment above the iframe — so this hook and
+    `PlayerShield` are the only layers available. Both are mitigation, not
+    prevention: the platform offers no way to cancel a `window.top.location`
+    shift or to close a window the provider opened. See the hook for the full
+    reasoning.
+
+    `promptOnExit` is on because a click-triggered hijack is exactly the case
+    where Chrome honours the `beforeunload` dialog. The viewer's own back button
+    and tab close during playback prompt too; the page genuinely cannot tell
+    those apart from a hijack.
+  */
+  const { popunderDetected, dismissPopunder } = useAdRedirectBlocker(open, {
+    promptOnExit: true,
+  });
 
   const playback = useMemo(() => {
     if (!item) return null;
@@ -434,6 +456,37 @@ export default function NexstreamPlayer({
                   </div>
                 </div>
               )}
+              {/*
+                NO `sandbox` ATTRIBUTE - DELIBERATE. DO NOT ADD ONE.
+
+                This was implemented and then reverted, because the provider
+                serves a page whose entire content is:
+
+                    "Playback blocked - This player cannot be loaded inside a
+                     restricted (sandboxed) frame."
+
+                and refuses to play. It inspects its own sandbox flags, so there
+                is no token combination that both sandboxes it and keeps
+                playback working.
+
+                The cost is that nothing in this file can stop the provider
+                navigating the tab or opening a pop-under. Those are enforced
+                only by the sandbox tokens `allow-top-navigation`, `allow-popups`
+                and `allow-top-navigation-by-user-activation`. The `allow`
+                attribute below is a Permissions Policy, which cannot express
+                any of them - popups and top-level navigation are outside what
+                Permissions Policy governs. Setting it would look like
+                hardening while changing nothing about the hijack.
+
+                What remains is the click shield below, which absorbs the first
+                gesture - the moment such a provider arms its pop-under
+                listener. So the common "pressed play and got sent to an ad
+                site" case is defused, even though the capability survives.
+
+                Real containment means not running the provider's JavaScript in
+                a frame at all: resolve the stream server-side and play it from
+                our own origin. See lib/playback.ts.
+              */}
               <iframe
                 key={playback.url}
                 src={playback.url}
@@ -444,6 +497,44 @@ export default function NexstreamPlayer({
                 onLoad={() => setLoading(false)}
                 className="h-full w-full border-0"
               />
+
+              {/*
+                Absorbs the first gesture so the provider's pop-under listener
+                never fires. Absolutely positioned inside the existing video
+                surface, so dimensions and layout are unchanged, and it
+                unmounts itself after one click.
+              */}
+              <PlayerShield />
+
+              {/*
+                Pop-under notice.
+
+                Reachable because the provider opening a window leaves this
+                document alive and focused-elsewhere. Dismissing it is explicit
+                rather than timed, so a viewer mid-scene is not interrupted by
+                something that auto-closes.
+              */}
+              {popunderDetected && (
+                <div
+                  role="status"
+                  className="absolute inset-x-0 bottom-0 z-20 flex items-center gap-3 bg-black/90 px-4 py-2.5 text-[11px] text-white backdrop-blur-md"
+                >
+                  <ShieldAlert className="h-4 w-4 shrink-0 text-crimson-bright" />
+                  <p className="min-w-0 flex-1">
+                    A pop-up may have opened behind this window. MovieShop can
+                    detect it but cannot close a tab the provider opened — close
+                    the ad tab if you see one. Your video is still playing.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={dismissPopunder}
+                    aria-label="Dismiss pop-up notice"
+                    className="shrink-0 rounded-md border border-white/15 px-2 py-1 font-bold uppercase tracking-wider transition-colors hover:border-crimson hover:text-white"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
             </>
           )}
 
