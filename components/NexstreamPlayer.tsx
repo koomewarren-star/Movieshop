@@ -669,7 +669,7 @@ export default function NexstreamPlayer({
                     aria-label={locked ? 'Unlock player controls' : 'Lock player controls and keep the screen awake'}
                     title={
                       locked
-                        ? 'Locked. Screen stays on and touches are ignored.'
+                        ? 'Locked. Screen stays on and touches are ignored. Tap to unlock.'
                         : 'Ignore touches and stop the screen sleeping'
                     }
                     className={`grid h-10 w-10 place-items-center rounded-lg transition-all duration-150 hover:scale-105 active:scale-95 ${
@@ -702,34 +702,6 @@ export default function NexstreamPlayer({
                   </span>
                 </div>
               </div>
-
-              {/*
-                Locked overlay. The whole surface is inert except this one
-                button, so a single tap anywhere unlocks without the viewer
-                having to find a target. Escape still closes the player, which
-                is handled by the existing key handler above.
-              */}
-              {locked && (
-                <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      event.preventDefault();
-                      setLocked(false);
-                    }}
-                    className="pointer-events-auto flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/70 px-8 py-6 text-center backdrop-blur-md"
-                  >
-                    <Lock className="h-7 w-7 text-crimson-bright" />
-                    <span className="text-xs font-bold uppercase tracking-widest text-white">
-                      Controls locked
-                    </span>
-                    <span className="text-[11px] text-white/45">
-                      Screen stays on. Tap to unlock.
-                    </span>
-                  </button>
-                </div>
-              )}
 
               {/*
                 Failure state. Offers to rebuild our own player state only; it
