@@ -89,10 +89,30 @@ export default function NexstreamPlayer({
   usePlayerDiagnostics({ active: open, recoveryNonce });
 
   /*
-    Held for exactly as long as the player is open. A screen lock that outlives
-    the player keeps the display on for an app nobody is watching.
+    Player lock.
+
+    Blocks touches reaching the video surface and holds the screen awake at the
+    same time, which is what the control is for: a phone left propped up
+    should not sleep mid-film, and a stray palm should not scrub the timeline.
+
+    What this does NOT do is stop the provider's advertising. The frame stays
+    unsandboxed and cross-origin, so its scripts keep running and can still open
+    a window on a timer or on movement. Making the frame inert removes our
+    ability to influence it, not its ability to act. This is a comfort control,
+    not a security control, and it should not be described as one.
+
+    The honest cost: while locked the viewer cannot reach the provider's own
+    controls either, so pausing or seeking means unlocking first. That is the
+    intended behaviour, and the unlock affordance is deliberately reachable by a
+    single tap.
    */
-  const wakeLock = useScreenWakeLock(open);
+  const [locked, setLocked] = useState(false);
+  const wakeLock = useScreenWakeLock(open && locked);
+
+  /* Never carry the lock across a close. */
+  useEffect(() => {
+    if (!open) setLocked(false);
+  }, [open]);
 
   /* Restore the viewer's chosen provider. */
   useEffect(() => {
@@ -602,7 +622,13 @@ export default function NexstreamPlayer({
                   setFrameReady(true);
                   playerEvent('player iframe loaded');
                 }}
-                className="h-full w-full border-0"
+                /*
+                  `pointer-events-none` while locked. This is what actually stops
+                  touches reaching the cross-origin document - there is no other
+                  way to make an embedded frame inert from outside it. It does
+                  not stop that document's own scripts running.
+                */
+                className={`h-full w-full border-0 ${locked ? 'pointer-events-none' : ''}`}
               />
 
               {/*
@@ -631,41 +657,31 @@ export default function NexstreamPlayer({
                 worse than its absence.
               */}
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-2 p-2.5 sm:p-3">
-                {/*
-                  Wake lock, left. Hidden entirely where the browser or the
-                  context cannot support it rather than shown as a dead
-                  control - `localhost` counts as a secure context, a plain-HTTP
-                  LAN address does not.
-                */}
-                {wakeLock.supported && (
-                  <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-md">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        event.preventDefault();
-                        void wakeLock.toggle();
-                      }}
-                      aria-pressed={wakeLock.active}
-                      aria-label={wakeLock.active ? 'Turn off keep screen awake' : 'Keep screen awake'}
-                      title={wakeLock.active ? 'Screen will stay on' : 'Stop the screen sleeping while you watch'}
-                      className={`grid h-10 w-10 place-items-center rounded-lg transition-all duration-150 hover:scale-105 active:scale-95 ${
-                        wakeLock.active
-                          ? 'bg-crimson/20 text-crimson-bright'
-                          : 'text-white/80 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      {wakeLock.active ? (
-                        <LockOpen className="h-4 w-4" />
-                      ) : (
-                        <Lock className="h-4 w-4" />
-                      )}
-                    </button>
-                    <span className="hidden pr-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40 sm:inline">
-                      {wakeLock.active ? 'Awake' : 'Keep Awake'}
-                    </span>
-                  </div>
-                )}
+                <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-md">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      event.preventDefault();
+                      setLocked((value) => !value);
+                    }}
+                    aria-pressed={locked}
+                    aria-label={locked ? 'Unlock player controls' : 'Lock player controls and keep the screen awake'}
+                    title={
+                      locked
+                        ? 'Locked. Screen stays on and touches are ignored.'
+                        : 'Ignore touches and stop the screen sleeping'
+                    }
+                    className={`grid h-10 w-10 place-items-center rounded-lg transition-all duration-150 hover:scale-105 active:scale-95 ${
+                      locked ? 'bg-crimson/20 text-crimson-bright' : 'text-white/80 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    {locked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                  </button>
+                  <span className="hidden pr-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40 sm:inline">
+                    {locked ? 'Locked' : 'Lock'}
+                  </span>
+                </div>
 
                 <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-md">
                   <button
@@ -686,6 +702,34 @@ export default function NexstreamPlayer({
                   </span>
                 </div>
               </div>
+
+              {/*
+                Locked overlay. The whole surface is inert except this one
+                button, so a single tap anywhere unlocks without the viewer
+                having to find a target. Escape still closes the player, which
+                is handled by the existing key handler above.
+              */}
+              {locked && (
+                <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      event.preventDefault();
+                      setLocked(false);
+                    }}
+                    className="pointer-events-auto flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/70 px-8 py-6 text-center backdrop-blur-md"
+                  >
+                    <Lock className="h-7 w-7 text-crimson-bright" />
+                    <span className="text-xs font-bold uppercase tracking-widest text-white">
+                      Controls locked
+                    </span>
+                    <span className="text-[11px] text-white/45">
+                      Screen stays on. Tap to unlock.
+                    </span>
+                  </button>
+                </div>
+              )}
 
               {/*
                 Failure state. Offers to rebuild our own player state only; it
