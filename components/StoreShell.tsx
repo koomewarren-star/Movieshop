@@ -14,6 +14,7 @@ import TrailerReels from '@/components/TrailerReels';
 import { useSupabaseUser } from '@/hooks/useSupabaseUser';
 import { playerEvent } from '@/hooks/usePlayerDiagnostics';
 import { pendingToMediaItem, readPendingPlayback } from '@/lib/playerRecovery';
+import { resolveDisplayName } from '@/lib/displayName';
 import type { WatchEntry } from '@/lib/watchProgress';
 import type { HomeData, MediaItem, SearchHit } from '@/lib/types';
 
@@ -204,7 +205,7 @@ function Store({ data }: { data: HomeData }) {
     {
       title: 'Account',
       links: isSignedIn
-        ? [user?.email ?? 'Signed in', 'Your watch progress', 'Sign out']
+        ? [resolveDisplayName(user), 'Your watch progress', 'Sign out']
         : ['Sign in', 'Create a free account', 'Help centre'],
     },
     { title: 'Legal', links: ['Terms of use', 'Privacy policy', 'Content notice'] },

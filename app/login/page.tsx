@@ -3,8 +3,9 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, LogIn, Mail, UserPlus } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, LogIn, Mail, UserPlus, UserRound } from 'lucide-react';
 import { tryCreateClient } from '@/lib/supabase/client';
+import { sanitiseDisplayName, suggestDisplayName } from '@/lib/displayName';
 import AuthCard from '@/components/AuthCard';
 
 /**
@@ -40,6 +41,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -88,9 +90,17 @@ export default function LoginPage() {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
-          // Send the viewer straight back to the app if the address is already
-          // confirmed; otherwise they land on the confirmation notice.
-          options: { emailRedirectTo: `${window.location.origin}/login` },
+          options: {
+            // Send the viewer straight back to the app if the address is already
+            // confirmed; otherwise they land on the confirmation notice.
+            emailRedirectTo: `${window.location.origin}/login`,
+            /*
+              Stored on the auth user itself, so the navbar can read it straight
+              out of the session with no extra query. This is what stops the
+              full email address being printed on screen.
+            */
+            data: { display_name: sanitiseDisplayName(displayName || suggestDisplayName(email.trim())) },
+          },
         });
 
         if (error) throw error;
@@ -186,6 +196,39 @@ export default function LoginPage() {
       )}
 
       <form onSubmit={onSubmit} noValidate className="mt-6 space-y-4">
+        {/*
+          Only asked for when creating an account. Prefilled from the email
+          local part as it is typed, so the common case is accepting the
+          suggestion rather than inventing something.
+        */}
+        {signingUp && (
+          <div>
+            <label
+              htmlFor="displayName"
+              className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-white/55"
+            >
+              Display name
+            </label>
+            <div className="relative">
+              <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+              <input
+                id="displayName"
+                name="displayName"
+                type="text"
+                autoComplete="nickname"
+                maxLength={24}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="How your name appears"
+                className="w-full rounded-xl border border-white/10 bg-black/40 py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/25 outline-none transition-colors focus:border-crimson/60"
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] text-white/35">
+              Shown instead of your email address. Others never see it.
+            </p>
+          </div>
+        )}
+
         <div>
           <label htmlFor="email" className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-white/55">
             Email
@@ -201,7 +244,15 @@ export default function LoginPage() {
               autoCapitalize="none"
               spellCheck={false}
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setEmail(next);
+                // Prefill only while the field is untouched, so an intentional
+                // name is never overwritten mid-typing.
+                if (!displayName.trim() && next.includes('@')) {
+                  setDisplayName(suggestDisplayName(next));
+                }
+              }}
               aria-invalid={Boolean(errors.email)}
               aria-describedby={errors.email ? 'email-error' : undefined}
               placeholder="you@example.com"

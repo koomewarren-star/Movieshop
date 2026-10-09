@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ArrowLeft, BarChart3, Clock, LogIn, TrendingUp, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { getStats } from '@/lib/analytics';
+import { resolveDisplayName } from '@/lib/displayName';
 import AuthCard from '@/components/AuthCard';
 
 export const dynamic = 'force-dynamic';
@@ -63,7 +64,7 @@ export default async function AdminStatsPage() {
             <h1 className="text-2xl font-black uppercase tracking-tight text-white">
               Movie<span className="text-crimson-bright">Shop</span> Stats
             </h1>
-            <p className="mt-1 text-sm text-white/45">Signed in as {user.email}</p>
+            <p className="mt-1 text-sm text-white/45">Signed in as {resolveDisplayName(user)}</p>
           </div>
           <Link
             href="/"

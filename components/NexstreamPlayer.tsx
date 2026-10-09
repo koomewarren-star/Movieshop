@@ -8,6 +8,8 @@ import {
   Expand,
   Info,
   Loader2,
+  Lock,
+  LockOpen,
   Minimize,
   Minus,
   Play,
@@ -34,6 +36,7 @@ import type { MediaItem } from '@/lib/types';
 import PlayerShield from '@/components/PlayerShield';
 import { useAdRedirectBlocker } from '@/hooks/useAdRedirectBlocker';
 import { playerEvent, usePlayerDiagnostics } from '@/hooks/usePlayerDiagnostics';
+import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
 import { clearPendingPlayback, savePendingPlayback } from '@/lib/playerRecovery';
 import { recordProgress } from '@/lib/watchProgress';
 
@@ -84,6 +87,12 @@ export default function NexstreamPlayer({
   const [frameReady, setFrameReady] = useState(false);
 
   usePlayerDiagnostics({ active: open, recoveryNonce });
+
+  /*
+    Held for exactly as long as the player is open. A screen lock that outlives
+    the player keeps the display on for an app nobody is watching.
+   */
+  const wakeLock = useScreenWakeLock(open);
 
   /* Restore the viewer's chosen provider. */
   useEffect(() => {
@@ -622,27 +631,41 @@ export default function NexstreamPlayer({
                 worse than its absence.
               */}
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-2 p-2.5 sm:p-3">
-                <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-md">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      // Keep the gesture from reaching the provider's own
-                      // listeners underneath the overlay.
-                      event.stopPropagation();
-                      event.preventDefault();
-                      reloadPlayer();
-                    }}
-                    disabled={loading && !error}
-                    aria-label="Reload player"
-                    title="Reload player"
-                    className="grid h-10 w-10 place-items-center rounded-lg text-white/80 transition-all duration-150 hover:scale-105 hover:bg-white/10 hover:text-white active:scale-95 disabled:pointer-events-none disabled:opacity-40"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                  </button>
-                  <span className="px-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40">
-                    Reload
-                  </span>
-                </div>
+                {/*
+                  Wake lock, left. Hidden entirely where the browser or the
+                  context cannot support it rather than shown as a dead
+                  control - `localhost` counts as a secure context, a plain-HTTP
+                  LAN address does not.
+                */}
+                {wakeLock.supported && (
+                  <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-md">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        event.preventDefault();
+                        void wakeLock.toggle();
+                      }}
+                      aria-pressed={wakeLock.active}
+                      aria-label={wakeLock.active ? 'Turn off keep screen awake' : 'Keep screen awake'}
+                      title={wakeLock.active ? 'Screen will stay on' : 'Stop the screen sleeping while you watch'}
+                      className={`grid h-10 w-10 place-items-center rounded-lg transition-all duration-150 hover:scale-105 active:scale-95 ${
+                        wakeLock.active
+                          ? 'bg-crimson/20 text-crimson-bright'
+                          : 'text-white/80 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {wakeLock.active ? (
+                        <LockOpen className="h-4 w-4" />
+                      ) : (
+                        <Lock className="h-4 w-4" />
+                      )}
+                    </button>
+                    <span className="hidden pr-1.5 text-[10px] font-bold uppercase tracking-wider text-white/40 sm:inline">
+                      {wakeLock.active ? 'Awake' : 'Keep Awake'}
+                    </span>
+                  </div>
+                )}
 
                 <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/10 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-md">
                   <button

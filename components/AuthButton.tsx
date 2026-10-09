@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Check, LogOut, User } from 'lucide-react';
 import { tryCreateClient } from '@/lib/supabase/client';
 import { useSupabaseUser } from '@/hooks/useSupabaseUser';
+import { displayNameInitials, resolveDisplayName } from '@/lib/displayName';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
@@ -65,6 +66,15 @@ export default function AuthButton() {
   }
 
   /*
+    The display name, not the email.
+
+    Printing a viewer's full address in the navbar puts it on screen in a shared
+    space and into every screenshot they share. Resolved from the auth metadata
+    set at sign-up, so this needs no extra query on every page load.
+   */
+  const label = resolveDisplayName(user);
+
+  /*
     Signed-in state.
 
     The green pill is the account's "you are in" indicator, and it occupies
@@ -101,15 +111,25 @@ export default function AuthButton() {
           aria-hidden="true"
           className="hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-crimson/20 text-[11px] font-black uppercase text-crimson-bright ring-1 ring-inset ring-crimson/40 lg:grid"
         >
-          {(user.email ?? '?').charAt(0)}
+          {displayNameInitials(label)}
         </span>
       )}
 
+      {/*
+        The email stays in the title attribute, which only appears on hover and
+        is how the viewer confirms which account they are in. It is not rendered
+        as text.
+
+        Visible from `sm` rather than `xl` because the label is a short name
+        where it used to be a full address, and it fits at far narrower widths.
+        Hiding it further right left the initials badge as the only thing on
+        screen between 1024 and 1280, which reads as "GO" rather than a name.
+      */}
       <span
-        title={user.email ?? undefined}
-        className="hidden max-w-[14rem] truncate text-xs font-semibold text-white/65 xl:inline"
+        title={user.email ?? label}
+        className="hidden max-w-[10rem] truncate text-xs font-semibold text-white/65 sm:inline"
       >
-        {user.email}
+        {label}
       </span>
 
       <button

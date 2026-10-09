@@ -19,6 +19,10 @@
 create table if not exists public.profiles (
   id               uuid primary key references auth.users (id) on delete cascade,
   email            text,
+  -- Public label shown in the navbar instead of the email address. Copied from
+  -- raw_user_meta_data ->> 'display_name' at sign-up, falling back to the email
+  -- local part, so it is never empty for a real account.
+  display_name     text,
   -- Set TRUE to make this account an admin. Deliberately not
   -- self-service: flipping it via a client update would be a privilege
   -- escalation, so RLS forbids writes to this column below.
@@ -26,6 +30,9 @@ create table if not exists public.profiles (
   created_at       timestamptz not null default now(),
   last_sign_in_at  timestamptz
 );
+
+-- Safe to re-run: adds display_name on databases created before it existed.
+alter table public.profiles add column if not exists display_name text;
 
 alter table public.profiles enable row level security;
 
@@ -60,8 +67,15 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email)
-  values (new.id, new.email)
+  insert into public.profiles (id, email, display_name)
+  values (
+    new.id,
+    new.email,
+    coalesce(
+      nullif(btrim(new.raw_user_meta_data ->> 'display_name'), ''),
+      split_part(new.email, '@', 1)
+    )
+  )
   on conflict (id) do nothing;
   return new;
 end;
@@ -115,7 +129,7 @@ create policy "update own"
   with check (auth.uid() = id);
 
 revoke update on public.profiles from authenticated;
-grant update (email) on public.profiles to authenticated;
+grant update (email, display_name) on public.profiles to authenticated;
 
 -- Profiles: insert is handled by the trigger with SECURITY DEFINER, so no
 -- client insert policy is granted on purpose. A viewer cannot fabricate a row.
