@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Crown, Heart, Lock, Smartphone, Sparkles } from 'lucide-react';
 import DetailsModal from '@/components/DetailsModal';
+import AdBanner from '@/components/AdBanner';
 import ContinueWatching from '@/components/ContinueWatching';
 import HeroBanner from '@/components/HeroBanner';
 import MediaRow from '@/components/MediaRow';
@@ -17,6 +18,16 @@ import { pendingToMediaItem, readPendingPlayback } from '@/lib/playerRecovery';
 import { resolveDisplayName } from '@/lib/displayName';
 import type { WatchEntry } from '@/lib/watchProgress';
 import type { HomeData, MediaItem, SearchHit } from '@/lib/types';
+
+/**
+ * How many catalogue rows sit between in-feed ad units.
+ *
+ * Every 3 is the conventional cadence for this layout: dense enough to earn,
+ * sparse enough that the feed still reads as a catalogue rather than an ad
+ * break. A slot with no zone id renders nothing, so this number never leaves
+ * empty labelled gaps on an unconfigured deploy.
+ */
+const IN_FEED_AD_EVERY = 3;
 
 function Store({ data }: { data: HomeData }) {
   /*
@@ -218,6 +229,21 @@ function Store({ data }: { data: HomeData }) {
       <main>
         <HeroBanner items={data.hero} onWatch={requestWatch} onDetails={openDetails} />
 
+        {/*
+          Primary leaderboard, directly under the hero.
+
+          Above the fold on a 4K hero is the most valuable placement on the page
+          and the first thing a viewer's eye lands on after the hero artwork.
+        */}
+        <div className="px-4 pt-6 sm:px-6 lg:px-10">
+          <div className="mx-auto max-w-[100rem]">
+            <AdBanner
+              slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_LEADERBOARD ?? ''}
+              variant="leaderboard"
+            />
+          </div>
+        </div>
+
         <TrailerReels items={data.reels} onSelect={openDetails} />
 
         {/* Continue Watching sits directly below Quick Clips. Renders nothing
@@ -254,34 +280,51 @@ function Store({ data }: { data: HomeData }) {
         )}
 
         <div id="browse" className="space-y-6 py-8 sm:space-y-9 sm:py-12">
-          {data.rows.map((row) => (
-            <MediaRow key={row.id} row={row} onSelect={openDetails} locked={!isSignedIn} />
-          ))}
-
           {/*
-            Rows beyond first paint.
-
-            Only their headings ship in the document; each one fetches page 1
-            from /api/row as it approaches the viewport. That is what allows the
-            catalogue to grow several times over without making the first paint
-            several times heavier - the initial HTML stays the size it is today.
+            Rows are interleaved with in-feed ad units every IN_FEED_AD_EVERY
+            entries. Built as one list rather than by rendering the initial rows
+            and then the deferred ones separately, because the deferred rows are
+            appended to the same visual sequence and an ad counted from the
+            wrong starting point would drift out of rhythm with the feed.
           */}
-          {deferred.map((meta) => (
-            <div key={meta.id} data-row-id={meta.id}>
-              <MediaRow
-                row={{
-                  id: meta.id,
-                  emoji: meta.emoji,
-                  title: meta.title,
-                  items: deferredItems[meta.id]?.items ?? [],
-                  nextPage: 2,
-                }}
-                onSelect={openDetails}
-                locked={!isSignedIn}
-                loading={Boolean(requested[meta.id]) && !deferredItems[meta.id]}
-              />
-            </div>
-          ))}
+          {(() => {
+            const inFeedSlot = process.env.NEXT_PUBLIC_ADSENSE_SLOT_INFEED ?? '';
+            const entries = [
+              ...data.rows.map((row) => ({ kind: 'row' as const, id: row.id, row })),
+              ...deferred.map((meta) => ({ kind: 'deferred' as const, id: meta.id, meta })),
+            ];
+
+            return entries.map((entry, index) => {
+              const showAd = inFeedSlot !== '' && index > 0 && index % IN_FEED_AD_EVERY === 0;
+
+              return (
+                <Fragment key={entry.id}>
+                  {showAd && (
+                    <AdBanner slot={inFeedSlot} variant="inFeed" className="my-2 sm:my-4" />
+                  )}
+
+                  {entry.kind === 'row' ? (
+                    <MediaRow row={entry.row} onSelect={openDetails} locked={!isSignedIn} />
+                  ) : (
+                    <div data-row-id={entry.id}>
+                      <MediaRow
+                        row={{
+                          id: entry.meta.id,
+                          emoji: entry.meta.emoji,
+                          title: entry.meta.title,
+                          items: deferredItems[entry.id]?.items ?? [],
+                          nextPage: 2,
+                        }}
+                        onSelect={openDetails}
+                        locked={!isSignedIn}
+                        loading={Boolean(requested[entry.id]) && !deferredItems[entry.id]}
+                      />
+                    </div>
+                  )}
+                </Fragment>
+              );
+            });
+          })()}
         </div>
 
         <footer className="mt-10 border-t border-white/[0.08] bg-black/60">
