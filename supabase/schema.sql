@@ -37,6 +37,56 @@ alter table public.profiles add column if not exists display_name text;
 alter table public.profiles enable row level security;
 
 -- ---------------------------------------------------------------------------
+-- saved_downloads
+--
+-- Which viewer saved which title. The file bytes stay on the server in
+-- storage/media/ and are streamed through /api/media, so this table holds only
+-- the association - which is why a 291 MB film saves as instantly as a clip.
+--
+-- unique (user_id, key) is what makes saving twice a no-op rather than a
+-- duplicate row.
+-- ---------------------------------------------------------------------------
+create table if not exists public.saved_downloads (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  key         text not null,
+  tmdb_id     bigint not null,
+  kind        text not null check (kind in ('movie','tv')),
+  title       text not null,
+  season      integer,
+  episode     integer,
+  poster      text,
+  file_name   text not null,
+  size_bytes  bigint,
+  created_at  timestamptz not null default now(),
+  unique (user_id, key)
+);
+
+create index if not exists saved_downloads_user_id_idx on public.saved_downloads (user_id, created_at desc);
+
+alter table public.saved_downloads enable row level security;
+
+-- A viewer may only ever touch their own rows. No policy is granted to `anon`,
+-- so an unauthenticated caller gets nothing and cannot probe for titles.
+drop policy if exists "read own downloads" on public.saved_downloads;
+create policy "read own downloads"
+  on public.saved_downloads for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "insert own downloads" on public.saved_downloads;
+create policy "insert own downloads"
+  on public.saved_downloads for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "delete own downloads" on public.saved_downloads;
+create policy "delete own downloads"
+  on public.saved_downloads for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
 -- activity_log
 --
 -- Append-only event trail. There is no UPDATE or DELETE policy, which is what

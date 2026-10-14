@@ -34,6 +34,8 @@ import {
 } from '@/lib/playback';
 import type { MediaItem } from '@/lib/types';
 import PlayerShield from '@/components/PlayerShield';
+import DownloadButton from '@/components/DownloadButton';
+import SaveButton from '@/components/SaveButton';
 import { useAdRedirectBlocker } from '@/hooks/useAdRedirectBlocker';
 import { playerEvent, usePlayerDiagnostics } from '@/hooks/usePlayerDiagnostics';
 import { useScreenWakeLock } from '@/hooks/useScreenWakeLock';
@@ -495,15 +497,35 @@ export default function NexstreamPlayer({
           </button>
 
           {/*
-            P2P download is temporarily disabled.
+            Direct download, for a title the download catalogue has a file for.
+            Renders nothing otherwise. See lib/downloads.ts.
 
-            The control was removed here rather than deleted so it can be
-            restored with a single revert. `P2PDownloader`, `lib/p2pStore.ts`
-            and `types/webtorrent.d.ts` are all still present and untouched;
-            dropping the last import is what keeps webtorrent out of the client
-            bundle, so the module is parked rather than dead weight on page
-            weight.
+            The P2P magnet downloader remains parked: `P2PDownloader`,
+            `lib/p2pStore.ts` and `types/webtorrent.d.ts` are still in the repo
+            and untouched, but nothing imports them, which is what keeps
+            webtorrent out of the client bundle.
           */}
+          <DownloadButton
+            id={item.id}
+            kind={item.kind}
+            title={item.title}
+            season={isTv ? season : undefined}
+            episode={isTv ? episode : undefined}
+          />
+
+          {/*
+            Save on this device. Distinct from Download: this one lands in
+            IndexedDB and shows up on /downloads for offline playback, while
+            Download writes a file to the device's normal downloads folder.
+          */}
+          <SaveButton
+            id={item.id}
+            kind={item.kind}
+            title={item.title}
+            poster={item.poster}
+            season={isTv ? season : undefined}
+            episode={isTv ? episode : undefined}
+          />
 
           <button
             type="button"

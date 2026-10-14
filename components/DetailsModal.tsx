@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Loader2, Play, Star, Users, X } from 'lucide-react';
-import P2PDownloader from '@/components/P2PDownloader';
-// P2P download is temporarily disabled; the import is parked so the control
-// can be restored with a single revert. See NexstreamPlayer.tsx.
+import DownloadButton from '@/components/DownloadButton';
+import SaveButton from '@/components/SaveButton';
 import type { MediaDetails, MediaItem } from '@/lib/types';
 
 interface DetailsModalProps {
@@ -227,9 +226,24 @@ export default function DetailsModal({ item, open, onClose, onPlay }: DetailsMod
                 Play {isTv ? `S${season} E${episode}` : 'Now'}
               </button>
 
-              {/* P2P download temporarily disabled alongside the player's control.
-                  See the note in NexstreamPlayer.tsx; restoring both means
-                  restoring both imports. */}
+              {/* Direct download, offered before playback so a title can be
+                  saved without starting the stream. Renders nothing when the
+                  catalogue has no file for it. See lib/downloads.ts. */}
+              <DownloadButton
+                id={item.id}
+                kind={item.kind}
+                title={item.title}
+                season={isTv ? season : undefined}
+                episode={isTv ? episode : undefined}
+              />
+              <SaveButton
+                id={item.id}
+                kind={item.kind}
+                title={item.title}
+                poster={item.poster}
+                season={isTv ? season : undefined}
+                episode={isTv ? episode : undefined}
+              />
               {loading && (
                 <span className="flex items-center gap-2 text-xs uppercase tracking-widest text-white/40">
                   <Loader2 className="h-4 w-4 animate-spin" />

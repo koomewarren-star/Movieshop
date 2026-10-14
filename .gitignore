@@ -11,3 +11,9 @@ yarn-error.log*
 .vercel
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# Downloadable media. Feature-length files must not be committed or deployed;
+# only the catalogue that points at them is tracked.
+storage/media/*
+!storage/media/manifest.json
+

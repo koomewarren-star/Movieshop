@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Menu, PlayCircle, X } from 'lucide-react';
+import { HardDriveDownload, Menu, PlayCircle, X } from 'lucide-react';
 import SearchBar from '@/components/SearchBar';
 import AuthButton from '@/components/AuthButton';
 import type { SearchHit } from '@/lib/types';
@@ -68,6 +68,20 @@ export default function Navbar({ onSearchSelect }: NavbarProps) {
         {/* Account session control. Renders nothing until Supabase is configured. */}
         <AuthButton />
 
+        {/*
+          Downloads is a route, not an in-page anchor, so it is kept out of
+          NAV_LINKS: those are hash links for sections of the storefront, and
+          mixing the two would scroll instead of navigating.
+        */}
+        <Link
+          href="/downloads"
+          title="Your saved downloads"
+          className="hidden shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-white/80 transition-all duration-300 hover:border-crimson/50 hover:bg-crimson/10 hover:text-white sm:inline-flex"
+        >
+          <HardDriveDownload className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Downloads</span>
+        </Link>
+
         <button
           type="button"
           onClick={() => setMenuOpen((value) => !value)}
@@ -102,13 +116,23 @@ export default function Navbar({ onSearchSelect }: NavbarProps) {
               </li>
             ))}
           </ul>
+
           <Link
-              href="/login"
-              onClick={() => setMenuOpen(false)}
-              className="btn-glow mt-4 flex w-full items-center justify-center"
-            >
-              Sign In — Free Access
-            </Link>
+            href="/downloads"
+            onClick={() => setMenuOpen(false)}
+            className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-base font-semibold text-white/80 transition-colors hover:bg-white/[0.07] hover:text-white"
+          >
+            <HardDriveDownload className="h-4 w-4" />
+            My Downloads
+          </Link>
+
+          <Link
+            href="/login"
+            onClick={() => setMenuOpen(false)}
+            className="btn-glow mt-3 flex w-full items-center justify-center"
+          >
+            Sign In — Free Access
+          </Link>
         </div>
       )}
     </header>
